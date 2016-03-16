@@ -1,4 +1,4 @@
-INCLUDES = -I $(top_srcdir) -I $(FPM_PATH)
+INCLUDES = -I $(top_srcdir)
 
 bin_PROGRAMS = fpmsyncd
 
