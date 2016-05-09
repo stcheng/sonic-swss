@@ -13,10 +13,10 @@ class PortsOrch : public Orch
 public:
     PortsOrch(DBConnector *db, string tableName);
 
+    bool reinit();
+    /* Return true when ConfigDone is received after initialization */
     bool isInitDone();
-
     bool getPort(string alias, Port &p);
-
     bool setPortAdminStatus(sai_object_id_t id, bool up);
 
 private:
