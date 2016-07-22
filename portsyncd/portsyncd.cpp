@@ -2,6 +2,7 @@
 #include "select.h"
 #include "netdispatcher.h"
 #include "netlink.h"
+#include "portmap.h"
 #include "producertable.h"
 #include "portsyncd/linksync.h"
 
@@ -137,24 +138,15 @@ void handlePortConfigFile(ProducerTable &p, string file)
 {
     cout << "Read port configuration file..." << endl;
 
-    ifstream infile(file);
-    if (!infile.is_open())
-    {
-        usage();
-        throw "Port configuration file not found!";
-    }
+    map<set<int>, string> port_map = handlePortMap(file);
 
-    string line;
-    while (getline(infile, line))
+    for (auto it : port_map)
     {
-        if (line.at(0) == '#')
-        {
-            continue;
-        }
-
-        istringstream iss(line);
-        string alias, lanes;
-        iss >> alias >> lanes;
+        string alias = it.second;
+        string lanes = "";
+        for (auto l : it.first)
+            lanes += to_string(l) + ",";
+        lanes.pop_back();
 
         FieldValueTuple lanes_attr("lanes", lanes);
         vector<FieldValueTuple> attrs = { lanes_attr };
@@ -162,8 +154,6 @@ void handlePortConfigFile(ProducerTable &p, string file)
 
         g_portSet.insert(alias);
     }
-
-    infile.close();
 }
 
 void handleVlanIntfFile(string file)

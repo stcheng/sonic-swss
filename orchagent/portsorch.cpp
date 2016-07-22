@@ -119,7 +119,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
         {
             tmp_lane_str += to_string(s) + " ";
         }
-        tmp_lane_str = tmp_lane_str.substr(0, tmp_lane_str.size()-1);
+        tmp_lane_str.pop_back();
 
         SWSS_LOG_NOTICE("Get port with lanes pid:%llx lanes:%s\n", port_list[i], tmp_lane_str.c_str());
         m_portListLaneMap[tmp_lane_set] = port_list[i];
