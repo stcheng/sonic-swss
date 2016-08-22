@@ -15,16 +15,36 @@ extern sai_object_id_t gVirtualRouterId;
 extern sai_router_interface_api_t*  sai_router_intfs_api;
 extern sai_route_api_t*             sai_route_api;
 
-IntfsOrch::IntfsOrch(DBConnector *db, string tableName, PortsOrch *portsOrch) :
-        Orch(db, tableName), m_portsOrch(portsOrch)
+extern PortsOrch *gPortsOrch;
+
+IntfsOrch::IntfsOrch(DBConnector *db, string tableName) :
+        Orch(db, tableName)
 {
+}
+
+sai_object_id_t IntfsOrch::getRouterIntfsId(string alias)
+{
+    Port port;
+    assert(gPortsOrch->getPort(alias, port));
+    assert(port.m_rif_id);
+    return port.m_rif_id;
+}
+
+void IntfsOrch::increaseRouterIntfsRefCount(string alias)
+{
+    m_syncdIntfses[alias].ref_count++;
+}
+
+void IntfsOrch::decreaseRouterIntfsRefCount(string alias)
+{
+    m_syncdIntfses[alias].ref_count--;
 }
 
 void IntfsOrch::doTask(Consumer &consumer)
 {
     SWSS_LOG_ENTER();
 
-    if (!m_portsOrch->isInitDone())
+    if (!gPortsOrch->isInitDone())
         return;
 
     auto it = consumer.m_toSync.begin();
@@ -61,14 +81,15 @@ void IntfsOrch::doTask(Consumer &consumer)
         if (op == SET_COMMAND)
         {
             /* Duplicate entry */
-            if (m_intfs.find(alias) != m_intfs.end() && m_intfs[alias].contains(ip_prefix.getIp()))
+            if (m_syncdIntfses.find(alias) != m_syncdIntfses.end() &&
+                m_syncdIntfses[alias].ip_addresses.contains(ip_prefix.getIp()))
             {
                 it = consumer.m_toSync.erase(it);
                 continue;
             }
 
             Port port;
-            if (!m_portsOrch->getPort(alias, port))
+            if (!gPortsOrch->getPort(alias, port))
             {
                 SWSS_LOG_ERROR("Failed to locate interface %s\n", alias.c_str());
                 it = consumer.m_toSync.erase(it);
@@ -78,7 +99,11 @@ void IntfsOrch::doTask(Consumer &consumer)
             if (!port.m_rif_id)
             {
                 addRouterIntfs(port);
-                m_intfs[alias] = IpAddresses();
+                IntfsEntry intfs_entry;
+                intfs_entry.ip_addresses = IpAddresses();
+                intfs_entry.ref_count = 0;
+                m_syncdIntfses[alias] = intfs_entry;
+
             }
 
             sai_unicast_route_entry_t unicast_route_entry;
@@ -105,10 +130,9 @@ void IntfsOrch::doTask(Consumer &consumer)
                 it++;
                 continue;
             }
-            else
-            {
-                SWSS_LOG_NOTICE("Create subnet route pre:%s\n", ip_prefix.to_string().c_str());
-            }
+
+            SWSS_LOG_NOTICE("Create subnet route pre:%s\n", ip_prefix.to_string().c_str());
+            increaseRouterIntfsRefCount(alias);
 
             unicast_route_entry.vr_id = gVirtualRouterId;
             unicast_route_entry.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
@@ -122,20 +146,21 @@ void IntfsOrch::doTask(Consumer &consumer)
             {
                 SWSS_LOG_ERROR("Failed to create packet action trap route ip:%s %d\n", ip_prefix.getIp().to_string().c_str(), status);
                 it++;
+                continue;
             }
-            else
-            {
-                SWSS_LOG_NOTICE("Create packet action trap route ip:%s\n", ip_prefix.getIp().to_string().c_str());
-                m_intfs[alias].add(ip_prefix.getIp());
-                it = consumer.m_toSync.erase(it);
-            }
+
+            SWSS_LOG_NOTICE("Create packet action trap route ip:%s\n", ip_prefix.getIp().to_string().c_str());
+            increaseRouterIntfsRefCount(alias);
+            m_syncdIntfses[alias].ip_addresses.add(ip_prefix.getIp());
+            it = consumer.m_toSync.erase(it);
         }
         else if (op == DEL_COMMAND)
         {
-            assert(m_intfs.find(alias) != m_intfs.end() && m_intfs[alias].contains(ip_prefix.getIp()));
+            assert(m_syncdIntfses.find(alias) != m_syncdIntfses.end() &&
+                   m_syncdIntfses[alias].ip_addresses.contains(ip_prefix.getIp()));
 
             Port port;
-            if (!m_portsOrch->getPort(alias, port))
+            if (!gPortsOrch->getPort(alias, port))
             {
                 SWSS_LOG_ERROR("Failed to locate interface %s\n", alias.c_str());
                 it = consumer.m_toSync.erase(it);
@@ -156,6 +181,9 @@ void IntfsOrch::doTask(Consumer &consumer)
                 continue;
             }
 
+            SWSS_LOG_NOTICE("Remove subnet route with prefix:%s", ip_prefix.to_string().c_str());
+            decreaseRouterIntfsRefCount(alias);
+
             unicast_route_entry.vr_id = gVirtualRouterId;
             unicast_route_entry.destination.addr_family = SAI_IP_ADDR_FAMILY_IPV4;
             unicast_route_entry.destination.addr.ip4 = ip_prefix.getIp().getV4Addr();
@@ -166,20 +194,44 @@ void IntfsOrch::doTask(Consumer &consumer)
             {
                 SWSS_LOG_ERROR("Failed to remove action trap route ip:%s %d\n", ip_prefix.getIp().to_string().c_str(), status);
                 it++;
+                continue;
+            }
+
+            SWSS_LOG_NOTICE("Remove packet action trap route ip:%s\n", ip_prefix.getIp().to_string().c_str());
+            decreaseRouterIntfsRefCount(alias);
+            m_syncdIntfses[alias].ip_addresses.remove(ip_prefix.getIp());
+            it = consumer.m_toSync.erase(it);
+        }
+    }
+    cleanUpRouterInterfaces();
+}
+
+void IntfsOrch::cleanUpRouterInterfaces()
+{
+    auto it = m_syncdIntfses.begin();
+    while (it != m_syncdIntfses.end())
+    {
+
+        SWSS_LOG_ERROR("alias: %s, ref_count: %d", it->first.c_str(), it->second.ref_count);
+
+        if (it->second.ref_count > 0)
+            it++;
+
+        if (!it->second.ip_addresses.getSize())
+        {
+            Port port;
+            if (!gPortsOrch->getPort(it->first, port))
+            {
+                SWSS_LOG_ERROR("Failed to locate interfae %s", it->first.c_str());
             }
             else
             {
-                SWSS_LOG_NOTICE("Remove packet action trap route ip:%s\n", ip_prefix.getIp().to_string().c_str());
-                m_intfs[alias].remove(ip_prefix.getIp());
-                it = consumer.m_toSync.erase(it);
-
-                if (!m_intfs[alias].getSize())
-                {
-                    removeRouterIntfs(port);
-                    m_intfs.erase(alias);
-                }
+                removeRouterIntfs(port);
             }
+            it = m_syncdIntfses.erase(it);
         }
+        else
+            it++;
     }
 }
 
@@ -242,7 +294,7 @@ bool IntfsOrch::addRouterIntfs(Port &port, sai_object_id_t virtual_router_id, Ma
         return false;
     }
 
-    m_portsOrch->setPort(port.m_alias, port);
+    gPortsOrch->setPort(port.m_alias, port);
 
     SWSS_LOG_NOTICE("Create router interface for port %s", port.m_alias.c_str());
 
@@ -261,7 +313,7 @@ bool IntfsOrch::removeRouterIntfs(Port &port)
     }
 
     port.m_rif_id = 0;
-    m_portsOrch->setPort(port.m_alias, port);
+    gPortsOrch->setPort(port.m_alias, port);
 
     return true;
 }

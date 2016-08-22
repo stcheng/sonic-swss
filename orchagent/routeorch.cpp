@@ -4,10 +4,12 @@
 
 #include "assert.h"
 
+extern sai_object_id_t gVirtualRouterId;
+
 extern sai_next_hop_group_api_t*    sai_next_hop_group_api;
 extern sai_route_api_t*             sai_route_api;
 
-extern sai_object_id_t gVirtualRouterId;
+extern PortsOrch *gPortsOrch;
 
 bool RouteOrch::hasNextHopGroup(IpAddresses ipAddresses)
 {
@@ -18,7 +20,7 @@ void RouteOrch::doTask(Consumer& consumer)
 {
     SWSS_LOG_ENTER();
 
-    if (!m_portsOrch->isInitDone())
+    if (!gPortsOrch->isInitDone())
         return;
 
     auto it = consumer.m_toSync.begin();
