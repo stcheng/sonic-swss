@@ -34,9 +34,10 @@ sai_lag_api_t*              sai_lag_api;
 sai_policer_api_t*          sai_policer_api;
 sai_tunnel_api_t*           sai_tunnel_api;
 
+/* Global variables */
 map<string, string> gProfileMap;
 sai_object_id_t gVirtualRouterId;
-sai_object_id_t underlayIfId;
+sai_object_id_t gUnderlayIfId;
 MacAddress gMacAddress;
 
 const char *test_profile_get_value (
@@ -166,6 +167,7 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Get the default virtual router ID */
     attr.id = SAI_SWITCH_ATTR_DEFAULT_VIRTUAL_ROUTER_ID;
     status = sai_switch_api->get_switch_attribute(1, &attr);
     if (status != SAI_STATUS_SUCCESS)
@@ -178,21 +180,21 @@ int main(int argc, char **argv)
 
     SWSS_LOG_NOTICE("Get switch virtual router ID %llx\n", gVirtualRouterId);
 
-    // create the underlay router interface to create a LOOPBACK type router interface (encap)
+    /* Create a loopback underlay router interface */
     sai_attribute_t underlay_intf_attrs[2];
     underlay_intf_attrs[0].id = SAI_ROUTER_INTERFACE_ATTR_VIRTUAL_ROUTER_ID;
     underlay_intf_attrs[0].value.oid = gVirtualRouterId;
     underlay_intf_attrs[1].id = SAI_ROUTER_INTERFACE_ATTR_TYPE;
     underlay_intf_attrs[1].value.s32 = SAI_ROUTER_INTERFACE_TYPE_LOOPBACK;
 
-    status = sai_router_intfs_api->create_router_interface(&underlayIfId, 2, underlay_intf_attrs);
+    status = sai_router_intfs_api->create_router_interface(&gUnderlayIfId, 2, underlay_intf_attrs);
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to create underlay router interface %d", status);
         return false;
     }
 
-    SWSS_LOG_NOTICE("Created underlay router interface ID %llx\n", underlayIfId);
+    SWSS_LOG_NOTICE("Created underlay router interface ID %llx\n", gUnderlayIfId);
 
     OrchDaemon *orchDaemon = new OrchDaemon();
     if (!orchDaemon->init())
