@@ -177,7 +177,6 @@ int main(int argc, char **argv)
     }
 
     gVirtualRouterId = attr.value.oid;
-
     SWSS_LOG_NOTICE("Get switch virtual router ID %llx\n", gVirtualRouterId);
 
     /* Create a loopback underlay router interface */
@@ -196,7 +195,9 @@ int main(int argc, char **argv)
 
     SWSS_LOG_NOTICE("Created underlay router interface ID %llx\n", gUnderlayIfId);
 
-    OrchDaemon *orchDaemon = new OrchDaemon();
+    /* Initialize orchestration components */
+    DBConnector *appl_db = new DBConnector(APPL_DB, "localhost", 6379, 0);
+    OrchDaemon *orchDaemon = new OrchDaemon(appl_db);
     if (!orchDaemon->init())
     {
         SWSS_LOG_ERROR("Failed to initialize orchstration daemon\n");

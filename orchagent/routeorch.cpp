@@ -4,10 +4,12 @@
 
 #include "assert.h"
 
+extern sai_object_id_t gVirtualRouterId;
+
 extern sai_next_hop_group_api_t*    sai_next_hop_group_api;
 extern sai_route_api_t*             sai_route_api;
 
-extern sai_object_id_t gVirtualRouterId;
+extern PortsOrch *gPortsOrch;
 
 bool RouteOrch::hasNextHopGroup(IpAddresses ipAddresses)
 {
@@ -17,9 +19,6 @@ bool RouteOrch::hasNextHopGroup(IpAddresses ipAddresses)
 void RouteOrch::doTask(Consumer& consumer)
 {
     SWSS_LOG_ENTER();
-
-    if (!m_portsOrch->isInitDone())
-        return;
 
     auto it = consumer.m_toSync.begin();
     while (it != consumer.m_toSync.end())
@@ -185,7 +184,7 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
     {
         if (!m_neighOrch->hasNextHop(it))
         {
-            SWSS_LOG_NOTICE("Failed to get next hop entry ip:%s",
+            SWSS_LOG_INFO("Failed to get next hop entry ip:%s",
                     it.to_string().c_str());
             return false;
         }
@@ -294,7 +293,7 @@ void RouteOrch::addTempRoute(IpPrefix ipPrefix, IpAddresses nextHops)
         {
             if (!m_neighOrch->hasNextHop(*it))
             {
-                SWSS_LOG_NOTICE("Failed to get next hop entry ip:%s",
+                SWSS_LOG_INFO("Failed to get next hop entry ip:%s",
                        (*it).to_string().c_str());
                 it = next_hop_set.erase(it);
             }
@@ -334,7 +333,7 @@ bool RouteOrch::addRoute(IpPrefix ipPrefix, IpAddresses nextHops)
         }
         else
         {
-            SWSS_LOG_NOTICE("Failed to get next hop entry ip:%s",
+            SWSS_LOG_INFO("Failed to get next hop entry ip:%s",
                     nextHops.to_string().c_str());
             return false;
         }

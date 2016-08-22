@@ -10,6 +10,8 @@
 #include "linkcache.h"
 #include "intfsyncd/intfsync.h"
 
+#include <iostream>
+
 using namespace std;
 using namespace swss;
 
@@ -49,6 +51,9 @@ void IntfSync::onMsg(int nlmsg_type, struct nl_object *obj)
     key+= ":";
     nl_addr2str(rtnl_addr_get_local(addr), addrStr, MAX_ADDR_SIZE);
     key+= addrStr;
+
+    cout << "Receive nlmsg from intfsyncd: type:" << nlmsg_type << " key:" << key << endl;
+
     if (nlmsg_type == RTM_DELADDR)
     {
         m_intfTable.del(key);

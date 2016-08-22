@@ -1,7 +1,10 @@
 #include "orch.h"
+#include "portsorch.h"
 #include "logger.h"
 #include <iostream>
 using namespace swss;
+
+extern PortsOrch *gPortsOrch;
 
 Orch::Orch(DBConnector *db, string tableName) :
     m_db(db)
@@ -111,6 +114,9 @@ bool Orch::execute(string tableName)
 
 void Orch::doTask()
 {
+    if (!gPortsOrch->isInitDone())
+        return;
+
     for(auto &it : m_consumerMap)
     {
         if (!it.second.m_toSync.empty())

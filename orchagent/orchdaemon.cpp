@@ -7,20 +7,16 @@
 using namespace std;
 using namespace swss;
 
-OrchDaemon::OrchDaemon()
+/* Global variable gPortsOrch declared */
+PortsOrch *gPortsOrch;
+
+OrchDaemon::OrchDaemon(DBConnector *applDb) :
+        m_applDb(applDb)
 {
-    m_applDb = nullptr;
-    m_asicDb = nullptr;
 }
 
 OrchDaemon::~OrchDaemon()
 {
-    if (m_applDb)
-        delete(m_applDb);
-
-    if (m_asicDb)
-        delete(m_asicDb);
-
     for (Orch *o : m_orchList)
         delete(o);
 }
@@ -29,22 +25,20 @@ bool OrchDaemon::init()
 {
     SWSS_LOG_ENTER();
 
-    m_applDb = new DBConnector(APPL_DB, "localhost", 6379, 0);
-
-    vector<string> ports_tables = {
+    vector<string> ports_table = {
         APP_PORT_TABLE_NAME,
         APP_VLAN_TABLE_NAME,
         APP_LAG_TABLE_NAME
     };
 
-    PortsOrch *ports_orch = new PortsOrch(m_applDb, ports_tables);
-    IntfsOrch *intfs_orch = new IntfsOrch(m_applDb, APP_INTF_TABLE_NAME, ports_orch);
-    NeighOrch *neigh_orch = new NeighOrch(m_applDb, APP_NEIGH_TABLE_NAME, ports_orch);
-    RouteOrch *route_orch = new RouteOrch(m_applDb, APP_ROUTE_TABLE_NAME, ports_orch, neigh_orch);
+    gPortsOrch = new PortsOrch(m_applDb, ports_table);
+    IntfsOrch *intfs_orch = new IntfsOrch(m_applDb, APP_INTF_TABLE_NAME);
+    NeighOrch *neigh_orch = new NeighOrch(m_applDb, APP_NEIGH_TABLE_NAME, intfs_orch);
+    RouteOrch *route_orch = new RouteOrch(m_applDb, APP_ROUTE_TABLE_NAME, neigh_orch);
     CoppOrch  *copp_orch  = new CoppOrch(m_applDb, APP_COPP_TABLE_NAME);
     TunnelDecapOrch *tunnel_decap_orch = new TunnelDecapOrch(m_applDb, APP_TUNNEL_DECAP_TABLE_NAME);
-
-    m_orchList = { ports_orch, intfs_orch, neigh_orch, route_orch, copp_orch, tunnel_decap_orch };
+    
+    m_orchList = { gPortsOrch, intfs_orch, neigh_orch, route_orch, copp_orch, tunnel_decap_orch };
     m_select = new Select();
 
     return true;

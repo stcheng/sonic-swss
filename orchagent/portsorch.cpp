@@ -39,6 +39,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to get CPU port\n");
+        throw "PortsOrch initialization failure";
     }
 
     m_cpuPort = attr.value.oid;
@@ -83,6 +84,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to get port number\n");
+        throw "PortsOrch initialization failure";
     }
 
     m_portCount = attr.value.u32;
@@ -99,6 +101,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to get port list");
+        throw "PortsOrch initialization failure";
     }
 
     /* Get port hardware lane info */
@@ -113,6 +116,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
         if (status != SAI_STATUS_SUCCESS)
         {
             SWSS_LOG_ERROR("Failed to get hardware lane list pid:%llx\n", port_list[i]);
+            throw "PortsOrch initialization failure";
         }
 
         set<int> tmp_lane_set;
@@ -140,7 +144,9 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
         if (status != SAI_STATUS_SUCCESS)
         {
             SWSS_LOG_ERROR("Failed to set port to hardware learn mode pid:%llx\n", port_list[i]);
+            throw "PortsOrch initialization failure";
         }
+        SWSS_LOG_NOTICE("Set port to hardware learn mode pid:%llx\n", port_list[i]);
     }
 
     /* Get default VLAN member list */
@@ -153,6 +159,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
     if (status != SAI_STATUS_SUCCESS)
     {
         SWSS_LOG_ERROR("Failed to get default VLAN member list");
+        throw "PortsOrch initialization failure";
     }
 
     /* Remove port from default VLAN */
@@ -162,6 +169,7 @@ PortsOrch::PortsOrch(DBConnector *db, vector<string> tableNames) :
         if (status != SAI_STATUS_SUCCESS)
         {
             SWSS_LOG_ERROR("Failed to remove port from default VLAN %d", i);
+            throw "PortsOrch initialization failure";
         }
     }
 }
