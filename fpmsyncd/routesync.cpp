@@ -10,6 +10,8 @@
 #include "fpmsyncd/fpmlink.h"
 #include "fpmsyncd/routesync.h"
 
+#include <iostream>
+
 using namespace std;
 using namespace swss;
 
@@ -43,8 +45,12 @@ void RouteSync::onMsg(int nlmsg_type, struct nl_object *obj)
     ipv4 = *(uint32_t*)nl_addr_get_binary_addr(dip);
     IpPrefix destip(ipv4, prefix);
 
+    cout << "Receive FPM from fpmsyncd: type:" << nlmsg_type << " key:"
+         << destip.to_string();
+
     if (nlmsg_type == RTM_DELROUTE)
     {
+        cout << endl;
         m_routeTable.del(destip.to_string());
         return;
     }
@@ -123,6 +129,8 @@ void RouteSync::onMsg(int nlmsg_type, struct nl_object *obj)
             ifindexes += string(",");
         }
     }
+
+    cout << " next_hops: " << nexthops << " ifindexes: " << ifindexes << endl;
 
     std::vector<FieldValueTuple> fvVector;
     FieldValueTuple nh("nexthop", nexthops);

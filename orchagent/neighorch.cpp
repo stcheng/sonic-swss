@@ -44,6 +44,9 @@ bool NeighOrch::addNextHop(IpAddress ipAddress, string alias)
         return false;
     }
 
+    SWSS_LOG_NOTICE("Create next hop entry id:%llx, ip:%s, rid:%llx\n", next_hop_id,
+                    ipAddress.to_string().c_str(), rif_id);
+
     NextHopEntry next_hop_entry;
     next_hop_entry.next_hop_id = next_hop_id;
     next_hop_entry.ref_count = 0;

@@ -91,7 +91,7 @@ void initSaiApi()
     sai_api_query(SAI_API_POLICER,              (void **)&sai_policer_api);
     sai_api_query(SAI_API_TUNNEL,               (void **)&sai_tunnel_api);
 
-    sai_log_set(SAI_API_SWITCH,                 SAI_LOG_NOTICE);
+    sai_log_set(SAI_API_SWITCH,                 SAI_LOG_DEBUG);
     sai_log_set(SAI_API_VIRTUAL_ROUTER,         SAI_LOG_NOTICE);
     sai_log_set(SAI_API_PORT,                   SAI_LOG_NOTICE);
     sai_log_set(SAI_API_VLAN,                   SAI_LOG_NOTICE);
