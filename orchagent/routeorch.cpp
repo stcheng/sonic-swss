@@ -256,14 +256,14 @@ bool RouteOrch::addNextHopGroup(IpAddresses ipAddresses)
             create_next_hop_group(&next_hop_group_id, nhg_attrs.size(), nhg_attrs.data());
     if (status != SAI_STATUS_SUCCESS)
     {
-        SWSS_LOG_ERROR("Failed to create next hop group nh:%s\n",
-                       ipAddresses.to_string().c_str());
+        SWSS_LOG_ERROR("Failed to create next hop group %s nhgid:%llx %d",
+                       ipAddresses.to_string().c_str(), next_hop_group_id, status);
         return false;
     }
 
     m_nextHopGroupCount ++;
-    SWSS_LOG_NOTICE("Create next hop group nhgid:%llx nh:%s \n",
-                    next_hop_group_id, ipAddresses.to_string().c_str());
+    SWSS_LOG_NOTICE("Create next hop group %s nhgid:%llx",
+                    ipAddresses.to_string().c_str(), next_hop_group_id);
 
     /* Increate the ref_count for the next hops used by the next hop group. */
     for (auto it : next_hop_set)
@@ -293,11 +293,14 @@ bool RouteOrch::removeNextHopGroup(IpAddresses ipAddresses)
         sai_status_t status = sai_next_hop_group_api->remove_next_hop_group(next_hop_group_id);
         if (status != SAI_STATUS_SUCCESS)
         {
-            SWSS_LOG_ERROR("Failed to remove next hop group nhgid:%llx\n", next_hop_group_id);
+            SWSS_LOG_ERROR("Failed to remove next hop group %s nhgid:%llx %d",
+                    ipAddresses.to_string().c_str(), next_hop_group_id, status);
             return false;
         }
 
         m_nextHopGroupCount --;
+        SWSS_LOG_NOTICE("Remove next hop group %s nhgid:%llx",
+                ipAddresses.to_string().c_str(), next_hop_group_id);
 
         set<IpAddress> ip_address_set = ipAddresses.getIpAddresses();
         for (auto it : ip_address_set)
