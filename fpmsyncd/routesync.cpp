@@ -115,6 +115,13 @@ void RouteSync::onMsg(int nlmsg_type, struct nl_object *obj)
         }
     }
 
+    /* If the only next hop is the management port, remove the entry. */
+    if (ifnames == "eth0")
+    {
+        m_routeTable.del(destipprefix);
+        return;
+    }
+
     vector<FieldValueTuple> fvVector;
     FieldValueTuple nh("nexthop", nexthops);
     FieldValueTuple idx("ifname", ifnames);
