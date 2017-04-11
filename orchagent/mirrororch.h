@@ -37,7 +37,7 @@ struct MirrorEntry
         bool resolved;
         IpAddress nexthop;
         IpPrefix prefix;
-    } nexthopInfo;
+    } routeInfo;
 
     struct
     {
@@ -62,7 +62,7 @@ struct MirrorEntry
         sessionId(0),
         refCount(0)
     {
-        nexthopInfo.resolved = false;
+        routeInfo.resolved = false;
         neighborInfo.resolved = false;
     }
 };
@@ -110,7 +110,7 @@ private:
     bool getNeighborInfo(const string&, MirrorEntry&);
     bool getNeighborInfo(const string&, MirrorEntry&, const NeighborEntry&, const MacAddress&);
 
-    void updateNextHop(const NextHopUpdate&);
+    void updateRoute(const RouteUpdate&);
     void updateNeighbor(const NeighborUpdate&);
     void updateFdb(const FdbUpdate&);
     void updateLagMember(const LagMemberUpdate&);

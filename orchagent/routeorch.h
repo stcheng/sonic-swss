@@ -24,22 +24,22 @@ struct NextHopGroupEntry
     int                 ref_count;          // reference count
 };
 
-struct NextHopUpdate
+struct RouteUpdate
 {
     IpPrefix prefix;
     IpAddresses nexthopGroup;
 };
 
-struct NextHopObserverEntry;
+struct RouteObserverEntry;
 
 /* NextHopGroupTable: next hop group IP addersses, NextHopGroupEntry */
 typedef map<IpAddresses, NextHopGroupEntry> NextHopGroupTable;
 /* RouteTable: destination network, next hop IP address(es) */
 typedef map<IpPrefix, IpAddresses> RouteTable;
-/* NextHopObserverTable: Destination IP address, next hop observer entry */
-typedef map<IpAddress, NextHopObserverEntry> NextHopObserverTable;
+/* RouteObserverTable: Destination IP address, next hop observer entry */
+typedef map<IpAddress, RouteObserverEntry> RouteObserverTable;
 
-struct NextHopObserverEntry
+struct RouteObserverEntry
 {
     RouteTable routeTable;
     list<Observer *> observers;
@@ -64,7 +64,7 @@ private:
     RouteTable m_syncdRoutes;
     NextHopGroupTable m_syncdNextHopGroups;
 
-    NextHopObserverTable m_nextHopObservers;
+    RouteObserverTable m_routeObservers;
 
     void increaseNextHopRefCount(IpAddresses);
     void decreaseNextHopRefCount(IpAddresses);
@@ -78,7 +78,7 @@ private:
 
     void doTask(Consumer& consumer);
 
-    void notifyNextHopChangeObservers(IpPrefix, IpAddresses, bool);
+    void notifyRouteChangeObservers(IpPrefix, IpAddresses, bool);
 };
 
 #endif /* SWSS_ROUTEORCH_H */

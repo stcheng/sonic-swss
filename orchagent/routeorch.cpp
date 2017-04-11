@@ -70,12 +70,12 @@ void RouteOrch::attach(Observer *observer, const IpAddress& dstAddr)
 
     SWSS_LOG_INFO("Attaching next hop observer for %s destination IP\n", dstAddr.to_string().c_str());
 
-    auto observerEntry = m_nextHopObservers.find(dstAddr);
+    auto observerEntry = m_routeObservers.find(dstAddr);
 
-    if (observerEntry == m_nextHopObservers.end())
+    if (observerEntry == m_routeObservers.end())
     {
-        m_nextHopObservers.emplace(dstAddr, NextHopObserverEntry());
-        observerEntry = m_nextHopObservers.find(dstAddr);
+        m_routeObservers.emplace(dstAddr, RouteObserverEntry());
+        observerEntry = m_routeObservers.find(dstAddr);
 
         for (auto route : m_syncdRoutes)
         {
@@ -91,17 +91,17 @@ void RouteOrch::attach(Observer *observer, const IpAddress& dstAddr)
     auto route = observerEntry->second.routeTable.rbegin();
     if (route != observerEntry->second.routeTable.rend())
     {
-        NextHopUpdate update = { route->first, route->second };
-        observer->update(SUBJECT_TYPE_NEXTHOP_CHANGE, static_cast<void *>(&update));
+        RouteUpdate update = { route->first, route->second };
+        observer->update(SUBJECT_TYPE_ROUTE_CHANGE, static_cast<void *>(&update));
     }
 }
 
 void RouteOrch::detach(Observer *observer, const IpAddress& dstAddr)
 {
     SWSS_LOG_ENTER();
-    auto observerEntry = m_nextHopObservers.find(dstAddr);
+    auto observerEntry = m_routeObservers.find(dstAddr);
 
-    if (observerEntry == m_nextHopObservers.end())
+    if (observerEntry == m_routeObservers.end())
     {
         SWSS_LOG_ERROR("Failed to detach observer for %s. Entry not found.\n", dstAddr.to_string().c_str());
         assert(false);
@@ -240,11 +240,11 @@ void RouteOrch::doTask(Consumer& consumer)
     }
 }
 
-void RouteOrch::notifyNextHopChangeObservers(IpPrefix prefix, IpAddresses nexthops, bool add)
+void RouteOrch::notifyRouteChangeObservers(IpPrefix prefix, IpAddresses nexthops, bool add)
 {
     SWSS_LOG_ENTER();
 
-    for (auto& entry : m_nextHopObservers)
+    for (auto& entry : m_routeObservers)
     {
         if (!prefix.isAddressInSubnet(entry.first))
         {
@@ -254,7 +254,7 @@ void RouteOrch::notifyNextHopChangeObservers(IpPrefix prefix, IpAddresses nextho
         if (add)
         {
             bool update_required = false;
-            NextHopUpdate update = { prefix, nexthops };
+            RouteUpdate update = { prefix, nexthops };
 
             /* Table should not be empty. Default route should always exists. */
             assert(!entry.second.routeTable.empty());
@@ -287,7 +287,7 @@ void RouteOrch::notifyNextHopChangeObservers(IpPrefix prefix, IpAddresses nextho
             {
                 for (auto observer : entry.second.observers)
                 {
-                    observer->update(SUBJECT_TYPE_NEXTHOP_CHANGE, static_cast<void *>(&update));
+                    observer->update(SUBJECT_TYPE_ROUTE_CHANGE, static_cast<void *>(&update));
                 }
             }
         }
@@ -305,11 +305,11 @@ void RouteOrch::notifyNextHopChangeObservers(IpPrefix prefix, IpAddresses nextho
                     assert(!entry.second.routeTable.empty());
 
                     auto route = entry.second.routeTable.rbegin();
-                    NextHopUpdate update = { route->first, route->second };
+                    RouteUpdate update = { route->first, route->second };
 
                     for (auto observer : entry.second.observers)
                     {
-                        observer->update(SUBJECT_TYPE_NEXTHOP_CHANGE, static_cast<void *>(&update));
+                        observer->update(SUBJECT_TYPE_ROUTE_CHANGE, static_cast<void *>(&update));
                     }
                 }
                 else
@@ -624,7 +624,7 @@ bool RouteOrch::addRoute(IpPrefix ipPrefix, IpAddresses nextHops)
 
     m_syncdRoutes[ipPrefix] = nextHops;
 
-    notifyNextHopChangeObservers(ipPrefix, nextHops, true);
+    notifyRouteChangeObservers(ipPrefix, nextHops, true);
     return true;
 }
 
@@ -692,12 +692,12 @@ bool RouteOrch::removeRoute(IpPrefix ipPrefix)
         }
 
         /* Notify about default route next hop change. */
-        notifyNextHopChangeObservers(ipPrefix, m_syncdRoutes[ipPrefix], true);
+        notifyRouteChangeObservers(ipPrefix, m_syncdRoutes[ipPrefix], true);
     }
     else
     {
         m_syncdRoutes.erase(ipPrefix);
-        notifyNextHopChangeObservers(ipPrefix, IpAddresses("0.0.0.0"), false);
+        notifyRouteChangeObservers(ipPrefix, IpAddresses("0.0.0.0"), false);
     }
     return true;
 }

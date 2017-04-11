@@ -50,10 +50,10 @@ void MirrorOrch::update(SubjectType type, void *cntx)
     assert(cntx);
 
     switch(type) {
-    case SUBJECT_TYPE_NEXTHOP_CHANGE:
+    case SUBJECT_TYPE_ROUTE_CHANGE:
     {
-        NextHopUpdate *update = static_cast<NextHopUpdate *>(cntx);
-        updateNextHop(*update);
+        RouteUpdate *update = static_cast<RouteUpdate *>(cntx);
+        updateRoute(*update);
         break;
     }
     case SUBJECT_TYPE_NEIGH_CHANGE:
@@ -295,11 +295,11 @@ bool MirrorOrch::getNeighborInfo(const string& name, MirrorEntry& session)
     NeighborEntry neighbor;
     MacAddress mac;
 
-    assert(session.nexthopInfo.resolved);
+    assert(session.routeInfo.resolved);
 
     SWSS_LOG_INFO("Getting neighbor info for %s session\n", name.c_str());
 
-    if (!m_neighOrch->getNeighborEntry(session.nexthopInfo.nexthop, neighbor, mac))
+    if (!m_neighOrch->getNeighborEntry(session.routeInfo.nexthop, neighbor, mac))
     {
         session.neighborInfo.resolved = false;
         return false;
@@ -543,7 +543,7 @@ bool MirrorOrch::updateSessionDstPort(const string& name, MirrorEntry& session)
     return true;
 }
 
-void MirrorOrch::updateNextHop(const NextHopUpdate& update)
+void MirrorOrch::updateRoute(const RouteUpdate& update)
 {
     SWSS_LOG_ENTER();
 
@@ -560,19 +560,19 @@ void MirrorOrch::updateNextHop(const NextHopUpdate& update)
 
         SWSS_LOG_INFO("Updating mirror session %s next hop\n", name.c_str());
 
-        if (session.nexthopInfo.resolved)
+        if (session.routeInfo.resolved)
         {
             // Check for ECMP route next hop update. If route prefix is the same
             // and current next hop is still in next hop group - do nothing.
-            if (session.nexthopInfo.prefix == update.prefix && update.nexthopGroup.getIpAddresses().count(session.nexthopInfo.nexthop))
+            if (session.routeInfo.prefix == update.prefix && update.nexthopGroup.getIpAddresses().count(session.routeInfo.nexthop))
             {
                 return;
             }
         }
 
-        session.nexthopInfo.nexthop = *update.nexthopGroup.getIpAddresses().begin();
-        session.nexthopInfo.prefix = update.prefix;
-        session.nexthopInfo.resolved = true;
+        session.routeInfo.nexthop = *update.nexthopGroup.getIpAddresses().begin();
+        session.routeInfo.prefix = update.prefix;
+        session.routeInfo.resolved = true;
 
         // Get neighbor
         if (!getNeighborInfo(name, session))
@@ -614,13 +614,13 @@ void MirrorOrch::updateNeighbor(const NeighborUpdate& update)
     auto sessionIter = m_syncdMirrors.begin();
     for (; sessionIter != m_syncdMirrors.end(); ++sessionIter)
     {
-        if (!sessionIter->second.nexthopInfo.resolved)
+        if (!sessionIter->second.routeInfo.resolved)
         {
             continue;
         }
 
         // It is possible to have few sessions that points to one next hop
-        if (sessionIter->second.nexthopInfo.nexthop != update.entry.ip_address)
+        if (sessionIter->second.routeInfo.nexthop != update.entry.ip_address)
         {
             continue;
         }
