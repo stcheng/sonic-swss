@@ -36,8 +36,10 @@ struct RouteObserverEntry;
 typedef map<IpAddresses, NextHopGroupEntry> NextHopGroupTable;
 /* RouteTable: destination network, next hop IP address(es) */
 typedef map<IpPrefix, IpAddresses> RouteTable;
-/* RouteObserverTable: Destination IP address, next hop observer entry */
+/* RouteObserverTable: destination IP address, next hop observer entry */
 typedef map<IpAddress, RouteObserverEntry> RouteObserverTable;
+/* NextHopRouteTable: next hop IP, route table associated with this next hop */
+typedef map<IpAddress, RouteTable> NextHopRouteTable;
 
 struct RouteObserverEntry
 {
@@ -45,7 +47,7 @@ struct RouteObserverEntry
     list<Observer *> observers;
 };
 
-class RouteOrch : public Orch, public Subject
+class RouteOrch : public Orch, public Observer, public Subject
 {
 public:
     RouteOrch(DBConnector *db, string tableName, NeighOrch *neighOrch);
@@ -55,6 +57,7 @@ public:
     void attach(Observer *, const IpAddress&);
     void detach(Observer *, const IpAddress&);
 
+    void update(SubjectType, void *);
 private:
     NeighOrch *m_neighOrch;
 
@@ -63,6 +66,9 @@ private:
 
     RouteTable m_syncdRoutes;
     NextHopGroupTable m_syncdNextHopGroups;
+
+    set<IpAddress> m_unresolvedNextHops;
+    NextHopRouteTable m_unresolvedNextHopRoutes;
 
     RouteObserverTable m_routeObservers;
 
@@ -79,6 +85,8 @@ private:
     void doTask(Consumer& consumer);
 
     void notifyRouteChangeObservers(IpPrefix, IpAddresses, bool);
+
+    void addUnresolvedNextHopRoute(IpAddress, IpPrefix, IpAddresses);
 };
 
 #endif /* SWSS_ROUTEORCH_H */

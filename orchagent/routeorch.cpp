@@ -117,6 +117,30 @@ void RouteOrch::detach(Observer *observer, const IpAddress& dstAddr)
        }
 }
 
+void RouteOrch::update(SubjectType type, void *cntx)
+{
+    SWSS_LOG_ENTER();
+
+    assert(cntx);
+
+    switch(type)
+    {
+        case SUBJECT_TYPE_NEXT_HOP_CHANGE:
+        {
+            IpAddress *ip_address = static_cast<IpAddress *>(cntx);
+            if (m_unresolvedNextHops.find(*ip_address) != m_unresolvedNextHops.end())
+            {
+                SWSS_LOG_INFO("Get an update from next hop %s",
+                              (*ip_address).to_string().c_str());
+                m_unresolvedNextHops.erase(*ip_address);
+            }
+            break;
+        }
+        default:
+            return;
+    }
+}
+
 void RouteOrch::doTask(Consumer& consumer)
 {
     SWSS_LOG_ENTER();
@@ -237,6 +261,36 @@ void RouteOrch::doTask(Consumer& consumer)
             SWSS_LOG_ERROR("Unknown operation type %s\n", op.c_str());
             it = consumer.m_toSync.erase(it);
         }
+    }
+
+    /* Check all unresolved next hops to see if some of them get resolved */
+    auto unresolved_entry = m_unresolvedNextHopRoutes.begin();
+    while (unresolved_entry != m_unresolvedNextHopRoutes.end())
+    {
+        /* Cannot find next hop IP in m_unresolvedNextHops set.
+         * This means that the next hop IP is resolved and the routes associated
+         * to this next hop could be added.
+         */
+        IpAddress next_hop = unresolved_entry->first;
+        if (m_unresolvedNextHops.find(next_hop) == m_unresolvedNextHops.end())
+        {
+            /* Iterate all the routes and try to add them one by one */
+            RouteTable routes = unresolved_entry->second;
+            auto route = routes.begin();
+            while (route != routes.end())
+            {
+                if (addRoute(route->first, route->second))
+                    route = routes.erase(route);
+                else
+                    route++;
+            }
+            if (routes.empty())
+                unresolved_entry = m_unresolvedNextHopRoutes.erase(unresolved_entry);
+            else
+                unresolved_entry++;
+        }
+        else
+            unresolved_entry++;
     }
 }
 
@@ -487,6 +541,7 @@ void RouteOrch::addTempRoute(IpPrefix ipPrefix, IpAddresses nextHops)
             {
                 SWSS_LOG_INFO("Failed to get next hop entry ip:%s",
                        (*it).to_string().c_str());
+                addUnresolvedNextHopRoute(*it, ipPrefix, nextHops);
                 it = next_hop_set.erase(it);
             }
             else
@@ -527,7 +582,9 @@ bool RouteOrch::addRoute(IpPrefix ipPrefix, IpAddresses nextHops)
         {
             SWSS_LOG_INFO("Failed to get next hop entry ip:%s",
                     nextHops.to_string().c_str());
-            return false;
+            addUnresolvedNextHopRoute(ip_address, ipPrefix, nextHops);
+            /* Return true as the route will be added when the next hop gets resolved */
+            return true;
         }
     }
     /* The route is pointing to a next hop group */
@@ -539,8 +596,9 @@ bool RouteOrch::addRoute(IpPrefix ipPrefix, IpAddresses nextHops)
             {
                 /* Add a temporary route when a next hop group cannot be added */
                 addTempRoute(ipPrefix, nextHops);
-                /* Return false since the original route is not successfully added */
-                return false;
+                /* Return true as the original route will be added when the next hops get resolved */
+                // TODO: how to solve the problem when all the next hops are resolved but still cannot create the next hop group???
+                return true;
             }
         }
 
@@ -700,4 +758,16 @@ bool RouteOrch::removeRoute(IpPrefix ipPrefix)
         notifyRouteChangeObservers(ipPrefix, IpAddresses("0.0.0.0"), false);
     }
     return true;
+}
+
+void RouteOrch::addUnresolvedNextHopRoute(IpAddress ipAddress, IpPrefix ipPrefix, IpAddresses nextHops)
+{
+    /* Add unresolved next hop IP if it does not exist */
+    if (m_unresolvedNextHops.find(ipAddress) == m_unresolvedNextHops.end())
+        m_unresolvedNextHops.insert(ipAddress);
+
+    if (m_unresolvedNextHopRoutes.find(ipAddress) == m_unresolvedNextHopRoutes.end())
+        m_unresolvedNextHopRoutes[ipAddress] = RouteTable();
+
+    m_unresolvedNextHopRoutes[ipAddress][ipPrefix] = nextHops;
 }
