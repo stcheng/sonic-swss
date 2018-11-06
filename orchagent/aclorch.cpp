@@ -290,7 +290,6 @@ bool AclRule::validateAddMatch(string attr_name, string attr_value)
         else if (attr_name == MATCH_SRC_IP || attr_name == MATCH_DST_IP)
         {
             IpPrefix ip(attr_value);
-
             if (!ip.isV4())
             {
                 SWSS_LOG_ERROR("IP type is not v4 type");
@@ -1124,6 +1123,29 @@ bool AclTable::create()
         attr.value.booldata = true;
         table_attrs.push_back(attr);
     }
+    // ACL table for mirror session supports both IPv4 and IPv6
+    else if (type == ACL_TABLE_MIRROR)
+    {
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IP;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_DST_IP;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IPV6;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_DST_IPV6;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_DSCP;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+    }
     else
     {
         attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IP;
@@ -1159,13 +1181,6 @@ bool AclTable::create()
     attr.id = SAI_ACL_TABLE_ATTR_ACL_STAGE;
     attr.value.s32 = stage == ACL_STAGE_INGRESS ? SAI_ACL_STAGE_INGRESS : SAI_ACL_STAGE_EGRESS;
     table_attrs.push_back(attr);
-
-    if (type == ACL_TABLE_MIRROR)
-    {
-        attr.id = SAI_ACL_TABLE_ATTR_FIELD_DSCP;
-        attr.value.booldata = true;
-        table_attrs.push_back(attr);
-    }
 
     sai_status_t status = sai_acl_api->create_acl_table(&m_oid, gSwitchId, (uint32_t)table_attrs.size(), table_attrs.data());
 
