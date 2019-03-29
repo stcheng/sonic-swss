@@ -24,11 +24,13 @@
 #define TABLE_PORTS       "PORTS"
 #define TABLE_SERVICES    "SERVICES"
 
-#define TABLE_TYPE_L3        "L3"
-#define TABLE_TYPE_L3V6      "L3V6"
-#define TABLE_TYPE_MIRROR    "MIRROR"
-#define TABLE_TYPE_PFCWD     "PFCWD"
-#define TABLE_TYPE_CTRLPLANE "CTRLPLANE"
+#define TABLE_TYPE_L3           "L3"
+#define TABLE_TYPE_L3V6         "L3V6"
+#define TABLE_TYPE_MIRROR       "MIRROR"
+#define TABLE_TYPE_MIRRORV6     "MIRRORV6"
+#define TABLE_TYPE_MIRRORV4V6   "MIRRORV4V6"
+#define TABLE_TYPE_PFCWD        "PFCWD"
+#define TABLE_TYPE_CTRLPLANE    "CTRLPLANE"
 #define TABLE_TYPE_DTEL_FLOW_WATCHLIST "DTEL_FLOW_WATCHLIST"
 #define TABLE_TYPE_DTEL_DROP_WATCHLIST "DTEL_DROP_WATCHLIST"
 
@@ -95,6 +97,8 @@ typedef enum
     ACL_TABLE_L3,
     ACL_TABLE_L3V6,
     ACL_TABLE_MIRROR,
+    ACL_TABLE_MIRRORV6,
+    ACL_TABLE_MIRRORV4V6,
     ACL_TABLE_PFCWD,
     ACL_TABLE_CTRLPLANE,
     ACL_TABLE_DTEL_FLOW_WATCHLIST,
@@ -363,8 +367,8 @@ inline void split(string str, Iterable& out, char delim = ' ')
 class AclOrch : public Orch, public Observer
 {
 public:
-    AclOrch(vector<TableConnector>& connectors, PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch);
-    AclOrch(vector<TableConnector>& connectors, PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch, DTelOrch *m_dTelOrch);
+    AclOrch(vector<TableConnector>& connectors, TableConnector switchTable,
+            PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch, DTelOrch *m_dTelOrch = NULL);
     ~AclOrch();
     void update(SubjectType, void *);
 
@@ -374,6 +378,8 @@ public:
     {
         return m_countersTable;
     }
+
+    Table m_switchTable;
 
     // FIXME: Add getters for them? I'd better to add a common directory of orch objects and use it everywhere
     MirrorOrch *m_mirrorOrch;
@@ -393,6 +399,8 @@ private:
     void doTask(SelectableTimer &timer);
     void init(vector<TableConnector>& connectors, PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch);
 
+    void queryMirrorTableCapability();
+
     static void collectCountersThread(AclOrch *pAclOrch);
 
     bool createBindAclTable(AclTable &aclTable, sai_object_id_t &table_oid);
@@ -410,6 +418,8 @@ private:
     map<sai_object_id_t, AclTable> m_AclTables;
     // TODO: Move all ACL tables into one map: name -> instance
     map<string, AclTable> m_ctrlAclTables;
+
+    map<acl_table_type_t, bool> m_mirrorTableCapabilities;
 
     static mutex m_countersMutex;
     static condition_variable m_sleepGuard;

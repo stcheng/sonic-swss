@@ -85,6 +85,8 @@ static acl_table_type_lookup_t aclTableTypeLookUp =
     { TABLE_TYPE_L3,        ACL_TABLE_L3 },
     { TABLE_TYPE_L3V6,      ACL_TABLE_L3V6 },
     { TABLE_TYPE_MIRROR,    ACL_TABLE_MIRROR },
+    { TABLE_TYPE_MIRRORV6,  ACL_TABLE_MIRRORV6 },
+    { TABLE_TYPE_MIRRORV4V6,ACL_TABLE_MIRRORV4V6 },
     { TABLE_TYPE_CTRLPLANE, ACL_TABLE_CTRLPLANE },
     { TABLE_TYPE_DTEL_FLOW_WATCHLIST, ACL_TABLE_DTEL_FLOW_WATCHLIST },
     { TABLE_TYPE_DTEL_DROP_WATCHLIST, ACL_TABLE_DTEL_DROP_WATCHLIST }
@@ -589,7 +591,13 @@ shared_ptr<AclRule> AclRule::makeShared(acl_table_type_t type, AclOrch *acl, Mir
         throw runtime_error("ACL rule action is not found in rule " + rule);
     }
 
-    if (type != ACL_TABLE_L3 && type != ACL_TABLE_L3V6 && type != ACL_TABLE_MIRROR && type != ACL_TABLE_DTEL_FLOW_WATCHLIST && type != ACL_TABLE_DTEL_DROP_WATCHLIST)
+    if (type != ACL_TABLE_L3 &&
+        type != ACL_TABLE_L3V6 &&
+        type != ACL_TABLE_MIRROR &&
+        type != ACL_TABLE_MIRRORV6 &&
+        type != ACL_TABLE_MIRRORV4V6 &&
+        type != ACL_TABLE_DTEL_FLOW_WATCHLIST &&
+        type != ACL_TABLE_DTEL_DROP_WATCHLIST)
     {
         throw runtime_error("Unknown table type.");
     }
@@ -948,6 +956,18 @@ bool AclRuleMirror::validateAddMatch(string attr_name, string attr_value)
         return false;
     }
 
+    if (m_tableType == ACL_TABLE_MIRROR &&
+            (attr_name == MATCH_SRC_IPV6 || attr_name == MATCH_DST_IPV6))
+    {
+        return false;
+    }
+
+    if (m_tableType == ACL_TABLE_MIRRORV6 &&
+            (attr_name == MATCH_SRC_IP || attr_name == MATCH_DST_IP))
+    {
+        return false;
+    }
+
     return AclRule::validateAddMatch(attr_name, attr_value);
 }
 
@@ -1118,9 +1138,12 @@ bool AclTable::create()
         return status == SAI_STATUS_SUCCESS;
     }
 
-    attr.id = SAI_ACL_TABLE_ATTR_FIELD_ETHER_TYPE;
-    attr.value.booldata = true;
-    table_attrs.push_back(attr);
+    if (type != ACL_TABLE_MIRRORV6)
+    {
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_ETHER_TYPE;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+    }
 
     attr.id = SAI_ACL_TABLE_ATTR_FIELD_ACL_IP_TYPE;
     attr.value.booldata = true;
@@ -1130,7 +1153,25 @@ bool AclTable::create()
     attr.value.booldata = true;
     table_attrs.push_back(attr);
 
-    if (type == ACL_TABLE_L3V6)
+    if (type == ACL_TABLE_MIRRORV4V6) // v4 + v6
+    {
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IP;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_DST_IP;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IPV6;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+
+        attr.id = SAI_ACL_TABLE_ATTR_FIELD_DST_IPV6;
+        attr.value.booldata = true;
+        table_attrs.push_back(attr);
+    }
+    else if (type == ACL_TABLE_L3V6 || type == ACL_TABLE_MIRRORV6) // v6 only
     {
         attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IPV6;
         attr.value.booldata = true;
@@ -1140,7 +1181,7 @@ bool AclTable::create()
         attr.value.booldata = true;
         table_attrs.push_back(attr);
     }
-    else
+    else // v4 only
     {
         attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IP;
         attr.value.booldata = true;
@@ -1780,6 +1821,66 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
 {
     SWSS_LOG_ENTER();
 
+    // TODO: Query SAI to get mirror table capabilities
+    string platform = getenv("platform") ? getenv("platform") : "";
+    if (platform == MLNX_PLATFORM_SUBSTRING)
+    {
+        m_mirrorTableCapabilities =
+        {
+            { ACL_TABLE_MIRROR, true },
+            { ACL_TABLE_MIRRORV6, true },
+            { ACL_TABLE_MIRRORV4V6, false }
+        };
+    }
+    else if (platform == BRCM_PLATFORM_SUBSTRING)
+    {
+        m_mirrorTableCapabilities =
+        {
+            { ACL_TABLE_MIRROR, true },
+            { ACL_TABLE_MIRRORV6, true },
+            { ACL_TABLE_MIRRORV4V6, true }
+        };
+    }
+    else if (platform == VS_PLATFORM_SUBSTRING)
+    {
+        m_mirrorTableCapabilities =
+        {
+            { ACL_TABLE_MIRROR, true },
+            { ACL_TABLE_MIRRORV6, true },
+            { ACL_TABLE_MIRRORV4V6, true }
+        };
+    }
+    else
+    {
+        m_mirrorTableCapabilities =
+        {
+            { ACL_TABLE_MIRROR, true },
+            { ACL_TABLE_MIRRORV6, false },
+            { ACL_TABLE_MIRRORV4V6, false }
+        };
+    }
+
+    vector<FieldValueTuple> fvVector;
+    for (auto const& it : m_mirrorTableCapabilities)
+    {
+        string value = it.second ? "true" : "false";
+        switch (it.first)
+        {
+            case ACL_TABLE_MIRROR:
+                fvVector.emplace_back(TABLE_TYPE_MIRROR, value);
+                break;
+            case ACL_TABLE_MIRRORV6:
+                fvVector.emplace_back(TABLE_TYPE_MIRRORV6, value);
+                break;
+            case ACL_TABLE_MIRRORV4V6:
+                fvVector.emplace_back(TABLE_TYPE_MIRRORV4V6, value);
+                break;
+            default:
+                break;
+        }
+    }
+    m_switchTable.set("switch", fvVector);
+
     sai_attribute_t attrs[2];
     attrs[0].id = SAI_SWITCH_ATTR_ACL_ENTRY_MINIMUM_PRIORITY;
     attrs[1].id = SAI_SWITCH_ATTR_ACL_ENTRY_MAXIMUM_PRIORITY;
@@ -1809,20 +1910,10 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
     timer->start();
 }
 
-AclOrch::AclOrch(vector<TableConnector>& connectors, PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch) :
+AclOrch::AclOrch(vector<TableConnector>& connectors, TableConnector switchTable,
+        PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch, DTelOrch *dtelOrch) :
         Orch(connectors),
-        m_mirrorOrch(mirrorOrch),
-        m_neighOrch(neighOrch),
-        m_routeOrch(routeOrch),
-        m_dTelOrch(NULL)
-{
-    SWSS_LOG_ENTER();
-
-    init(connectors, portOrch, mirrorOrch, neighOrch, routeOrch);
-}
-
-AclOrch::AclOrch(vector<TableConnector>& connectors, PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch, DTelOrch *dtelOrch) :
-        Orch(connectors),
+        m_switchTable(switchTable.first, switchTable.second),
         m_mirrorOrch(mirrorOrch),
         m_neighOrch(neighOrch),
         m_routeOrch(routeOrch),
@@ -2254,14 +2345,24 @@ bool AclOrch::processAclTableType(string type, acl_table_type_t &table_type)
 {
     SWSS_LOG_ENTER();
 
-    auto tt = aclTableTypeLookUp.find(to_upper(type));
+    auto iter = aclTableTypeLookUp.find(to_upper(type));
 
-    if (tt == aclTableTypeLookUp.end())
+    if (iter == aclTableTypeLookUp.end())
     {
         return false;
     }
 
-    table_type = tt->second;
+    if (iter->second == ACL_TABLE_MIRROR || iter->second == ACL_TABLE_MIRRORV6 ||
+        iter->second == ACL_TABLE_MIRRORV4V6)
+    {
+        if (!m_mirrorTableCapabilities[iter->second])
+        {
+            SWSS_LOG_ERROR("Table type %s is not supported", type.c_str());
+            return false;
+        }
+    }
+
+    table_type = iter->second;
 
     return true;
 }
