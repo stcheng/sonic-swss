@@ -24,15 +24,14 @@
 #define TABLE_PORTS       "PORTS"
 #define TABLE_SERVICES    "SERVICES"
 
-#define TABLE_TYPE_L3           "L3"
-#define TABLE_TYPE_L3V6         "L3V6"
-#define TABLE_TYPE_MIRROR       "MIRROR"
-#define TABLE_TYPE_MIRRORV6     "MIRRORV6"
-#define TABLE_TYPE_MIRRORV4V6   "MIRRORV4V6"
-#define TABLE_TYPE_PFCWD        "PFCWD"
-#define TABLE_TYPE_CTRLPLANE    "CTRLPLANE"
-#define TABLE_TYPE_DTEL_FLOW_WATCHLIST "DTEL_FLOW_WATCHLIST"
-#define TABLE_TYPE_DTEL_DROP_WATCHLIST "DTEL_DROP_WATCHLIST"
+#define TABLE_TYPE_L3                   "L3"
+#define TABLE_TYPE_L3V6                 "L3V6"
+#define TABLE_TYPE_MIRROR               "MIRROR"
+#define TABLE_TYPE_MIRRORV6             "MIRRORV6"
+#define TABLE_TYPE_PFCWD                "PFCWD"
+#define TABLE_TYPE_CTRLPLANE            "CTRLPLANE"
+#define TABLE_TYPE_DTEL_FLOW_WATCHLIST  "DTEL_FLOW_WATCHLIST"
+#define TABLE_TYPE_DTEL_DROP_WATCHLIST  "DTEL_DROP_WATCHLIST"
 
 #define RULE_PRIORITY           "PRIORITY"
 #define MATCH_IN_PORTS          "IN_PORTS"
@@ -57,8 +56,8 @@
 #define MATCH_INNER_L4_SRC_PORT "INNER_L4_SRC_PORT"
 #define MATCH_INNER_L4_DST_PORT "INNER_L4_DST_PORT"
 
-#define ACTION_PACKET_ACTION    "PACKET_ACTION"
-#define ACTION_MIRROR_ACTION    "MIRROR_ACTION"
+#define ACTION_PACKET_ACTION                "PACKET_ACTION"
+#define ACTION_MIRROR_ACTION                "MIRROR_ACTION"
 #define ACTION_DTEL_FLOW_OP                 "FLOW_OP"
 #define ACTION_DTEL_INT_SESSION             "INT_SESSION"
 #define ACTION_DTEL_DROP_REPORT_ENABLE      "DROP_REPORT_ENABLE"
@@ -98,7 +97,6 @@ typedef enum
     ACL_TABLE_L3V6,
     ACL_TABLE_MIRROR,
     ACL_TABLE_MIRRORV6,
-    ACL_TABLE_MIRRORV4V6,
     ACL_TABLE_PFCWD,
     ACL_TABLE_CTRLPLANE,
     ACL_TABLE_DTEL_FLOW_WATCHLIST,
@@ -414,18 +412,19 @@ private:
     sai_status_t createDTelWatchListTables();
     sai_status_t deleteDTelWatchListTables();
 
-    //vector <AclTable> m_AclTables;
     map<sai_object_id_t, AclTable> m_AclTables;
     // TODO: Move all ACL tables into one map: name -> instance
     map<string, AclTable> m_ctrlAclTables;
 
+    bool m_hasMirrorTable = false;
+    bool m_hasMirrorV6Table = false;
     map<acl_table_type_t, bool> m_mirrorTableCapabilities;
 
     static mutex m_countersMutex;
     static condition_variable m_sleepGuard;
     static bool m_bCollectCounters;
-    static swss::DBConnector m_db;
-    static swss::Table m_countersTable;
+    static DBConnector m_db;
+    static Table m_countersTable;
 };
 
 #endif /* SWSS_ACLORCH_H */

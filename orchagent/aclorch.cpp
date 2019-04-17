@@ -86,7 +86,6 @@ static acl_table_type_lookup_t aclTableTypeLookUp =
     { TABLE_TYPE_L3V6,      ACL_TABLE_L3V6 },
     { TABLE_TYPE_MIRROR,    ACL_TABLE_MIRROR },
     { TABLE_TYPE_MIRRORV6,  ACL_TABLE_MIRRORV6 },
-    { TABLE_TYPE_MIRRORV4V6,ACL_TABLE_MIRRORV4V6 },
     { TABLE_TYPE_CTRLPLANE, ACL_TABLE_CTRLPLANE },
     { TABLE_TYPE_DTEL_FLOW_WATCHLIST, ACL_TABLE_DTEL_FLOW_WATCHLIST },
     { TABLE_TYPE_DTEL_DROP_WATCHLIST, ACL_TABLE_DTEL_DROP_WATCHLIST }
@@ -595,14 +594,13 @@ shared_ptr<AclRule> AclRule::makeShared(acl_table_type_t type, AclOrch *acl, Mir
         type != ACL_TABLE_L3V6 &&
         type != ACL_TABLE_MIRROR &&
         type != ACL_TABLE_MIRRORV6 &&
-        type != ACL_TABLE_MIRRORV4V6 &&
         type != ACL_TABLE_DTEL_FLOW_WATCHLIST &&
         type != ACL_TABLE_DTEL_DROP_WATCHLIST)
     {
-        throw runtime_error("Unknown table type.");
+        throw runtime_error("Unknown table type");
     }
 
-    /* Mirror rules can exist in both tables*/
+    /* Mirror rules can exist in both tablesc*/
     if (action == ACTION_MIRROR_ACTION)
     {
         return make_shared<AclRuleMirror>(acl, mirror, rule, table, type);
@@ -958,12 +956,13 @@ bool AclRuleMirror::validateAddMatch(string attr_name, string attr_value)
 
     if (m_tableType == ACL_TABLE_MIRROR &&
             (attr_name == MATCH_SRC_IPV6 || attr_name == MATCH_DST_IPV6))
+        // XXX: check if mirror table supports IPv6 or not
     {
         return false;
     }
 
     if (m_tableType == ACL_TABLE_MIRRORV6 &&
-            (attr_name == MATCH_SRC_IP || attr_name == MATCH_DST_IP))
+            (attr_name == MATCH_SRC_IP || attr_name == MATCH_DST_IP || attr_name == MATCH_ETHER_TYPE))
     {
         return false;
     }
@@ -1153,7 +1152,7 @@ bool AclTable::create()
     attr.value.booldata = true;
     table_attrs.push_back(attr);
 
-    if (type == ACL_TABLE_MIRRORV4V6) // v4 + v6
+    if (type == ACL_TABLE_MIRROR)
     {
         attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IP;
         attr.value.booldata = true;
@@ -1163,6 +1162,7 @@ bool AclTable::create()
         attr.value.booldata = true;
         table_attrs.push_back(attr);
 
+        // XXX: check the capability
         attr.id = SAI_ACL_TABLE_ATTR_FIELD_SRC_IPV6;
         attr.value.booldata = true;
         table_attrs.push_back(attr);
@@ -1822,6 +1822,7 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
     SWSS_LOG_ENTER();
 
     // TODO: Query SAI to get mirror table capabilities
+    // XXX: need to store info whether to put together or separate
     string platform = getenv("platform") ? getenv("platform") : "";
     if (platform == MLNX_PLATFORM_SUBSTRING)
     {
@@ -1829,7 +1830,6 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
         {
             { ACL_TABLE_MIRROR, true },
             { ACL_TABLE_MIRRORV6, true },
-            { ACL_TABLE_MIRRORV4V6, false }
         };
     }
     else if (platform == BRCM_PLATFORM_SUBSTRING)
@@ -1838,7 +1838,6 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
         {
             { ACL_TABLE_MIRROR, true },
             { ACL_TABLE_MIRRORV6, true },
-            { ACL_TABLE_MIRRORV4V6, true }
         };
     }
     else if (platform == VS_PLATFORM_SUBSTRING)
@@ -1847,7 +1846,6 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
         {
             { ACL_TABLE_MIRROR, true },
             { ACL_TABLE_MIRRORV6, true },
-            { ACL_TABLE_MIRRORV4V6, true }
         };
     }
     else
@@ -1856,7 +1854,6 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
         {
             { ACL_TABLE_MIRROR, true },
             { ACL_TABLE_MIRRORV6, false },
-            { ACL_TABLE_MIRRORV4V6, false }
         };
     }
 
@@ -1871,9 +1868,6 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
                 break;
             case ACL_TABLE_MIRRORV6:
                 fvVector.emplace_back(TABLE_TYPE_MIRRORV6, value);
-                break;
-            case ACL_TABLE_MIRRORV4V6:
-                fvVector.emplace_back(TABLE_TYPE_MIRRORV4V6, value);
                 break;
             default:
                 break;
@@ -2352,8 +2346,8 @@ bool AclOrch::processAclTableType(string type, acl_table_type_t &table_type)
         return false;
     }
 
-    if (iter->second == ACL_TABLE_MIRROR || iter->second == ACL_TABLE_MIRRORV6 ||
-        iter->second == ACL_TABLE_MIRRORV4V6)
+    // XXX: come back to here again
+    if (iter->second == ACL_TABLE_MIRROR || iter->second == ACL_TABLE_MIRRORV6)
     {
         if (!m_mirrorTableCapabilities[iter->second])
         {
