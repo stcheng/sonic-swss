@@ -155,6 +155,8 @@ bool OrchDaemon::init()
 
     WatermarkOrch *wm_orch = new WatermarkOrch(m_configDb, wm_tables);
 
+    PolicerOrch *policer_orch = new PolicerOrch(m_configDb, "POLICER");
+
     /*
      * The order of the orch list is important for state restore of warm start and
      * the queued processing in m_toSync map after gPortsOrch->isPortReady() is set.
@@ -163,7 +165,7 @@ bool OrchDaemon::init()
      * when iterating ConsumerMap.
      * That is ensured implicitly by the order of map key, "LAG_TABLE" is smaller than "VLAN_TABLE" in lexicographic order.
      */
-    m_orchList = { gSwitchOrch, gCrmOrch, gBufferOrch, gPortsOrch, gIntfsOrch, gNeighOrch, gRouteOrch, copp_orch, tunnel_decap_orch, qos_orch, wm_orch };
+    m_orchList = { gSwitchOrch, gCrmOrch, gBufferOrch, gPortsOrch, gIntfsOrch, gNeighOrch, gRouteOrch, copp_orch, tunnel_decap_orch, qos_orch, wm_orch, policer_orch };
 
 
     bool initialize_dtel = false;
@@ -197,7 +199,7 @@ bool OrchDaemon::init()
         m_orchList.push_back(dtel_orch);
     }
     TableConnector stateDbSwitchTable(m_stateDb, "SWITCH_CAPABILITY");
-    gAclOrch = new AclOrch(acl_table_connectors, stateDbSwitchTable, gPortsOrch, mirror_orch, gNeighOrch, gRouteOrch, dtel_orch);
+    gAclOrch = new AclOrch(acl_table_connectors, stateDbSwitchTable, gPortsOrch, mirror_orch, gNeighOrch, gRouteOrch, policer_orch, dtel_orch);
 
     m_orchList.push_back(gFdbOrch);
     m_orchList.push_back(mirror_orch);

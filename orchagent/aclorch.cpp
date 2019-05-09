@@ -573,7 +573,9 @@ AclRuleCounters AclRule::getCounters()
     return AclRuleCounters(counter_attr[0].value.u64, counter_attr[1].value.u64);
 }
 
-shared_ptr<AclRule> AclRule::makeShared(acl_table_type_t type, AclOrch *acl, MirrorOrch *mirror, DTelOrch *dtel, const string& rule, const string& table, const KeyOpFieldsValuesTuple& data)
+shared_ptr<AclRule> AclRule::makeShared(acl_table_type_t type,
+        AclOrch *acl, MirrorOrch *mirror, PolicerOrch *policer, DTelOrch *dtel,
+        const string& rule, const string& table, const KeyOpFieldsValuesTuple& data)
 {
     string action;
     bool action_found = false;
@@ -613,7 +615,7 @@ shared_ptr<AclRule> AclRule::makeShared(acl_table_type_t type, AclOrch *acl, Mir
     /* Mirror rules can exist in both tables */
     if (action == ACTION_MIRROR_ACTION)
     {
-        return make_shared<AclRuleMirror>(acl, mirror, rule, table, type);
+        return make_shared<AclRuleMirror>(acl, mirror, policer, rule, table, type);
     }
     /* L3 rules can exist only in L3 table */
     else if (type == ACL_TABLE_L3)
@@ -943,10 +945,12 @@ bool AclRuleL3V6::validateAddMatch(string attr_name, string attr_value)
 }
 
 
-AclRuleMirror::AclRuleMirror(AclOrch *aclOrch, MirrorOrch *mirror, string rule, string table, acl_table_type_t type) :
+AclRuleMirror::AclRuleMirror(AclOrch *aclOrch, MirrorOrch *mirror, PolicerOrch *policer,
+        string rule, string table, acl_table_type_t type) :
         AclRule(aclOrch, rule, table, type),
         m_state(false),
-        m_pMirrorOrch(mirror)
+        m_pMirrorOrch(mirror),
+        m_pPolicerOrch(policer)
 {
 }
 
@@ -954,19 +958,24 @@ bool AclRuleMirror::validateAddAction(string attr_name, string attr_value)
 {
     SWSS_LOG_ENTER();
 
-    if (attr_name != ACTION_MIRROR_ACTION)
+    if (attr_name == ACTION_MIRROR_ACTION)
     {
-        return false;
+        if (!m_pMirrorOrch->sessionExists(attr_value))
+        {
+            return false;
+        }
+
+        m_sessionName = attr_value;
+        return true;
     }
 
-    if (!m_pMirrorOrch->sessionExists(attr_value))
+    if (attr_name == ACTION_POLICER_ACTION)
     {
-        return false;
+        m_policerName = attr_value;
+        return true;
     }
 
-    m_sessionName = attr_value;
-
-    return true;
+    return false;
 }
 
 bool AclRuleMirror::validateAddMatch(string attr_name, string attr_value)
@@ -1037,41 +1046,58 @@ bool AclRuleMirror::create()
 {
     SWSS_LOG_ENTER();
 
-    sai_attribute_value_t value;
-    bool state = false;
-    sai_object_id_t oid = SAI_NULL_OBJECT_ID;
+    sai_object_id_t session_oid = SAI_NULL_OBJECT_ID;
+    if (!m_pMirrorOrch->getSessionOid(m_sessionName, session_oid))
+    {
+        return false;
+    }
 
+    bool state = false;
     if (!m_pMirrorOrch->getSessionStatus(m_sessionName, state))
     {
         throw runtime_error("Failed to get mirror session state");
     }
 
-    // Increase session reference count regardless of state to deny
-    // attempt to remove mirror session with attached ACL rules.
-    if (!m_pMirrorOrch->increaseRefCount(m_sessionName))
-    {
-        throw runtime_error("Failed to increase mirror session reference count");
-    }
-
     if (!state)
     {
-        return true;
+        return false;
     }
 
-    if (!m_pMirrorOrch->getSessionOid(m_sessionName, oid))
-    {
-        throw runtime_error("Failed to get mirror session OID");
-    }
+    m_pMirrorOrch->increaseRefCount(m_sessionName);
 
-    value.aclaction.enable = true;
-    value.aclaction.parameter.objlist.list = &oid;
-    value.aclaction.parameter.objlist.count = 1;
+    sai_attribute_value_t session_value;
+    session_value.aclaction.enable = true;
+    session_value.aclaction.parameter.objlist.list = &session_oid;
+    session_value.aclaction.parameter.objlist.count = 1;
 
     m_actions.clear();
-    m_actions[SAI_ACL_ENTRY_ATTR_ACTION_MIRROR_INGRESS] = value;
+    m_actions.emplace(SAI_ACL_ENTRY_ATTR_ACTION_MIRROR_INGRESS, session_value);
+
+    if (!m_policerName.empty())
+    {
+        sai_object_id_t policer_oid = SAI_NULL_OBJECT_ID;
+        if (!m_pPolicerOrch->getPolicerOid(m_policerName, policer_oid))
+        {
+            return false;
+        }
+
+        m_pPolicerOrch->increaseRefCount(m_policerName);
+
+        sai_attribute_value_t policer_value;
+        policer_value.aclaction.enable = true;
+        policer_value.aclaction.parameter.oid = policer_oid;
+
+        m_actions.emplace(SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER, policer_value);
+    }
 
     if (!AclRule::create())
     {
+        m_pMirrorOrch->decreaseRefCount(m_sessionName);
+        if (!m_policerName.empty())
+        {
+            m_pPolicerOrch->decreaseRefCount(m_policerName);
+        }
+
         return false;
     }
 
@@ -1095,6 +1121,11 @@ bool AclRuleMirror::remove()
     if (!m_pMirrorOrch->decreaseRefCount(m_sessionName))
     {
         throw runtime_error("Failed to decrease mirror session reference count");
+    }
+
+    if (!m_pPolicerOrch->decreaseRefCount(m_policerName))
+    {
+        throw runtime_error("Failed to decrease policer reference count");
     }
 
     m_state = false;
@@ -2020,12 +2051,14 @@ void AclOrch::init(vector<TableConnector>& connectors, PortsOrch *portOrch, Mirr
 }
 
 AclOrch::AclOrch(vector<TableConnector>& connectors, TableConnector switchTable,
-        PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch, DTelOrch *dtelOrch) :
+        PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch,
+        RouteOrch *routeOrch, PolicerOrch *policerOrch, DTelOrch *dtelOrch) :
         Orch(connectors),
         m_switchTable(switchTable.first, switchTable.second),
         m_mirrorOrch(mirrorOrch),
         m_neighOrch(neighOrch),
         m_routeOrch(routeOrch),
+        m_policerOrch(policerOrch),
         m_dTelOrch(dtelOrch)
 {
     SWSS_LOG_ENTER();
@@ -2426,8 +2459,7 @@ void AclOrch::doAclRuleTask(Consumer &consumer)
                 type = table_id == m_mirrorTableId ? ACL_TABLE_MIRROR : ACL_TABLE_MIRRORV6;
             }
 
-
-            newRule = AclRule::makeShared(type, this, m_mirrorOrch, m_dTelOrch, rule_id, table_id, t);
+            newRule = AclRule::makeShared(type, this, m_mirrorOrch, m_policerOrch, m_dTelOrch, rule_id, table_id, t);
 
             for (const auto& itr : kfvFieldsValues(t))
             {
