@@ -11,6 +11,7 @@
 #include "orch.h"
 #include "portsorch.h"
 #include "mirrororch.h"
+#include "policerorch.h"
 #include "dtelorch.h"
 #include "observer.h"
 
@@ -62,6 +63,7 @@
 
 #define ACTION_PACKET_ACTION                "PACKET_ACTION"
 #define ACTION_MIRROR_ACTION                "MIRROR_ACTION"
+#define ACTION_POLICER_ACTION               "POLICER_ACTION"
 #define ACTION_DTEL_FLOW_OP                 "FLOW_OP"
 #define ACTION_DTEL_INT_SESSION             "INT_SESSION"
 #define ACTION_DTEL_DROP_REPORT_ENABLE      "DROP_REPORT_ENABLE"
@@ -197,7 +199,9 @@ public:
         return m_counterOid;
     }
 
-    static shared_ptr<AclRule> makeShared(acl_table_type_t type, AclOrch *acl, MirrorOrch *mirror, DTelOrch *dtel, const string& rule, const string& table, const KeyOpFieldsValuesTuple&);
+    static shared_ptr<AclRule> makeShared(acl_table_type_t type,
+            AclOrch *acl, MirrorOrch *mirror, PolicerOrch *policer, DTelOrch *dtel,
+            const string& rule, const string& table, const KeyOpFieldsValuesTuple&);
     virtual ~AclRule() {}
 
 protected:
@@ -260,7 +264,8 @@ public:
 class AclRuleMirror: public AclRule
 {
 public:
-    AclRuleMirror(AclOrch *m_pAclOrch, MirrorOrch *m_pMirrorOrch, string rule, string table, acl_table_type_t type);
+    AclRuleMirror(AclOrch *m_pAclOrch, MirrorOrch *m_pMirrorOrch, PolicerOrch *m_pPolicerOrch,
+            string rule, string table, acl_table_type_t type);
     bool validateAddAction(string attr_name, string attr_value);
     bool validateAddMatch(string attr_name, string attr_value);
     bool validate();
@@ -272,8 +277,10 @@ public:
 protected:
     bool m_state;
     string m_sessionName;
+    string m_policerName;
     AclRuleCounters counters;
     MirrorOrch *m_pMirrorOrch;
+    PolicerOrch *m_pPolicerOrch;
 };
 
 class AclRuleDTelFlowWatchListEntry: public AclRule
@@ -379,7 +386,8 @@ class AclOrch : public Orch, public Observer
 {
 public:
     AclOrch(vector<TableConnector>& connectors, TableConnector switchTable,
-            PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch, RouteOrch *routeOrch, DTelOrch *m_dTelOrch = NULL);
+            PortsOrch *portOrch, MirrorOrch *mirrorOrch, NeighOrch *neighOrch,
+            RouteOrch *routeOrch, PolicerOrch *policerOrch, DTelOrch *m_dTelOrch = NULL);
     ~AclOrch();
     void update(SubjectType, void *);
 
@@ -396,6 +404,7 @@ public:
     MirrorOrch *m_mirrorOrch;
     NeighOrch *m_neighOrch;
     RouteOrch *m_routeOrch;
+    PolicerOrch *m_policerOrch;
     DTelOrch *m_dTelOrch;
 
     bool addAclTable(AclTable &aclTable, string table_id);
