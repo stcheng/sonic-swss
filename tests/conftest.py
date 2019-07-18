@@ -13,6 +13,19 @@ import subprocess
 from datetime import datetime
 from swsscommon import swsscommon
 
+def retry(exception, callback, arguments, times=3, timeout=120):
+    for _ in range(times):
+        try:
+            return callback(**arguments)
+        except exception as err:
+            print("catch exception:" + str(err))
+            time.sleep(timeout)
+            continue
+        else:
+            break
+    else:
+        raise
+
 def ensure_system(cmd):
     rc = os.WEXITSTATUS(os.system(cmd))
     if rc:
@@ -193,8 +206,10 @@ class DockerVirtualSwitch(object):
             self.net_cleanup()
             self.restart()
         else:
-            self.ctn_sw = self.client.containers.run('debian:jessie', privileged=True, detach=True,
-                    command="bash", stdin_open=True)
+            self.ctn_sw = retry(
+                    Exception, self.client.containers.run,
+                    {'image':'debian:jessie', 'privileged':True, 'detach':True,
+                    'command':"bash", 'stdin_open':True})
             (status, output) = commands.getstatusoutput("docker inspect --format '{{.State.Pid}}' %s" % self.ctn_sw.name)
             self.ctn_sw_pid = int(output)
 
@@ -211,10 +226,11 @@ class DockerVirtualSwitch(object):
             self.environment = ["fake_platform={}".format(fakeplatform)] if fakeplatform else []
 
             # create virtual switch container
-            self.ctn = self.client.containers.run('docker-sonic-vs', privileged=True, detach=True,
-                    environment=self.environment,
-                    network_mode="container:%s" % self.ctn_sw.name,
-                    volumes={ self.mount: { 'bind': '/var/run/redis', 'mode': 'rw' } })
+            self.ctn = retry(
+                    Exception, self.client.containers.run,
+                    {'image':'docker-sonic-vs', 'privileged':True, 'detach':True,
+                    'network_mode':'container:%s' % self.ctn_sw.name,
+                    'volumes':{ self.mount: { 'bind': '/var/run/redis', 'mode': 'rw' }}})
 
         self.appldb = None
         self.redis_sock = self.mount + '/' + "redis.sock"
@@ -231,11 +247,11 @@ class DockerVirtualSwitch(object):
             raise
 
     def destroy(self):
-        if self.appldb:
+        if hasattr(self, "appldb"):
             del self.appldb
         if self.cleanup:
-            self.ctn.remove(force=True)
-            self.ctn_sw.remove(force=True)
+            retry(Exception, self.ctn.remove, {'force':True})
+            retry(Exception, self.ctn_sw.remove, {'force':True})
             os.system("rm -rf {}".format(self.mount))
             for s in self.servers:
                 s.destroy()
@@ -798,7 +814,7 @@ def dvs(request):
         dvs.get_logs(request.module.__name__)
     else:
         dvs.get_logs()
-    dvs.destroy()
+    retry(Exception, dvs.destroy, {})
 
 @pytest.yield_fixture
 def testlog(request, dvs):
