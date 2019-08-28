@@ -320,7 +320,12 @@ bool TeamMgr::setLagAdminStatus(const string &alias, const string &admin_status)
 
     // ip link set dev <port_channel_name> [up|down]
     cmd << IP_CMD << " link set dev " << alias << " " << admin_status;
-    EXEC_WITH_ERROR_THROW(cmd.str(), res);
+    if (exec(cmd.str(), res) != 0)
+    {
+        SWSS_LOG_ERROR("Failed to set port channel %s admin status to %s",
+                alias.c_str(), admin_status.c_str());
+        return false;
+    }
 
     SWSS_LOG_NOTICE("Set port channel %s admin status to %s",
             alias.c_str(), admin_status.c_str());
@@ -337,7 +342,12 @@ bool TeamMgr::setLagMtu(const string &alias, const string &mtu)
 
     // ip link set dev <port_channel_name> mtu <mtu_value>
     cmd << IP_CMD << " link set dev " << alias << " mtu " << mtu;
-    EXEC_WITH_ERROR_THROW(cmd.str(), res);
+    if (exec(cmd.str(), res) != 0)
+    {
+        SWSS_LOG_ERROR("Failed to set port channel %s MTU to %s",
+                alias.c_str(), mtu.c_str());
+        return false;
+    }
 
     vector<FieldValueTuple> fvs;
     FieldValueTuple fv("mtu", mtu);
@@ -424,9 +434,14 @@ bool TeamMgr::removeLag(const string &alias)
     string res;
 
     cmd << TEAMD_CMD << " -k -t " << alias;
-    EXEC_WITH_ERROR_THROW(cmd.str(), res);
+    if (exec(cmd.str(), res) != 0)
+    {
+        SWSS_LOG_ERROR("Failed to remove port channel %s",
+                alias.c_str());
+        return false;
+    }
 
-    SWSS_LOG_NOTICE("Stop port channel %s", alias.c_str());
+    SWSS_LOG_NOTICE("Remove port channel %s", alias.c_str());
 
     return true;
 }
@@ -506,7 +521,12 @@ task_process_status TeamMgr::addLagMember(const string &lag, const string &membe
     // ip link set dev <member> [up|down]
     cmd.str(string());
     cmd << IP_CMD << " link set dev " << member << " " << admin_status;
-    EXEC_WITH_ERROR_THROW(cmd.str(), res);
+    if (exec(cmd.str(), res) != 0)
+    {
+        SWSS_LOG_ERROR("Failed to set %s admin status to %s",
+                member.c_str(), admin_status.c_str());
+        return task_failed;
+    }
 
     fvs.clear();
     FieldValueTuple fv("mtu", mtu);
