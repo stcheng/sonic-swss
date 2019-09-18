@@ -88,8 +88,8 @@ private:
     Table m_mirrorTable;
 
     MirrorTable m_syncdMirrors;
-    // session_name -> VLAN : monitor_port_alias
-    map<string, string> m_recoverySessionPortMap;
+    // session_name -> VLAN | monitor_port_alias | next_hop_ip
+    map<string, string> m_recoverySessionMap;
 
     bool m_freezeUpdate = false;
 
