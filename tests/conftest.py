@@ -757,6 +757,27 @@ class DockerVirtualSwitch(object):
         tbl.set(interface + ":" + ip, fvs)
         time.sleep(1)
 
+    def remove_neighbor(self, interface, ip):
+        tbl = swsscommon.ProducerStateTable(self.pdb, "NEIGH_TABLE")
+        tbl._del(interface + ":" + ip)
+        time.sleep(1)
+
+    def add_route(self, prefix, nexthop):
+        self.runcmd("ip route add " + prefix + " via " + nexthop)
+        time.sleep(1)
+
+    def add_route_ecmp(self, prefix, nexthops):
+        cmd = ""
+        for nexthop in nexthops:
+            cmd += " nexthop via " + nexthop
+
+        self.runcmd("ip route add " + prefix + cmd)
+        time.sleep(1)
+
+    def remove_route(self, prefix):
+        self.runcmd("ip route del " + prefix)
+        time.sleep(1)
+
     def setup_db(self):
         self.pdb = swsscommon.DBConnector(0, self.redis_sock, 0)
         self.adb = swsscommon.DBConnector(1, self.redis_sock, 0)
