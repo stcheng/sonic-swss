@@ -232,12 +232,14 @@ TeamSync::TeamPortSync::TeamPortSync(const string &lagName, int ifindex,
         }
         catch (const system_error& e)
         {
-            SWSS_LOG_WARN("Caught system_error on %s %d:%s", lagName.c_str(),
-                    e.code().value(), e.what());
-
             if (++count == max_retries)
             {
-                throw runtime_error("Failed to initialize team handler");
+                throw;
+            }
+            else
+            {
+                SWSS_LOG_WARN("Failed to initialize team handler. LAG=%s error=%d:%s, attempt=%d",
+                              lagName.c_str(), e.code().value(), e.what(), count);
             }
 
             sleep(1);
